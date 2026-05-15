@@ -1,0 +1,25 @@
+name = "claude-cron"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Daily heartbeat. Per-job `next_run` controls actual cadence.
+# Default: 13:00 UTC ~ 05:00-06:00 PT. Adjust to user timezone at setup.
+[triggers]
+crons = ["0 13 * * *"]
+
+# D1 binding. database_id is filled in at setup by the helping Claude
+# (or `wrangler d1 create claude-cron` returns it).
+[[d1_databases]]
+binding = "DB"
+database_name = "claude-cron"
+database_id = "<filled-in-at-setup>"
+
+[vars]
+# Resolver model. Bump via env if judgments are too coarse.
+MODEL = "claude-haiku-4-5"
+
+# Secrets (NEVER put values in this file):
+#   ANTHROPIC_API_KEY   -- wrangler secret put ANTHROPIC_API_KEY
+#   RESEND_API_KEY      -- wrangler secret put RESEND_API_KEY
+#   RECIPIENT_EMAIL     -- wrangler secret put RECIPIENT_EMAIL
+#   RESEND_FROM         -- wrangler secret put RESEND_FROM  (verified Resend sender)

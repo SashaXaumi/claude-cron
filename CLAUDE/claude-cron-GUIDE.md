@@ -63,11 +63,12 @@ CLI path: `wrangler deploy`.
 
 ### 4. Set the secrets
 
-Three secrets. **These are secrets — they go in Worker secret storage, never in `wrangler.toml`, never in the Worker source, never in D1.** Make this explicit to the user; a user pasting an API key into the wrong field is a real and damaging mistake.
+Four secrets. **These are secrets — they go in Worker secret storage, never in `wrangler.toml`, never in the Worker source, never in D1.** Make this explicit to the user; a user pasting an API key into the wrong field is a real and damaging mistake.
 
 - `ANTHROPIC_API_KEY`
 - `RESEND_API_KEY`
 - `RECIPIENT_EMAIL` — technically not a secret, but set it the same way for simplicity: the one address Claude-Cron emails. Claude-Cron only ever emails this address.
+- `RESEND_FROM` — the verified sender address that Resend will use as the `from` on outgoing email. Must be on a domain the user verified in Resend (step where you walked them through Resend setup). If they used Resend's onboarding sender instead of verifying a domain, use whatever address Resend gave them (e.g. `onboarding@resend.dev`). Tell them: this is the address that will appear in their inbox as the sender.
 
 Dashboard: Worker → Settings → Variables and Secrets → add each as an encrypted secret.
 CLI: `wrangler secret put ANTHROPIC_API_KEY` (repeat for each).
