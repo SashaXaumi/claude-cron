@@ -21,7 +21,7 @@ database_name = "claude-cron"
 
 [vars]
 # Resolver model. Bump via env if judgments are too coarse.
-MODEL = "claude-haiku-4-5"
+MODEL = "claude-opus-4-7"
 
 # Secrets (NEVER put values in this file):
 #   ANTHROPIC_API_KEY   -- wrangler secret put ANTHROPIC_API_KEY

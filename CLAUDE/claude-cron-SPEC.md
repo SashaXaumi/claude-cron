@@ -144,7 +144,7 @@ database_name = "claude-cron"
 database_id = "<filled in at setup>"
 
 [vars]
-MODEL = "claude-haiku-4-5"   # resolver model; can bump via env if judgments too coarse
+MODEL = "claude-opus-4-7"    # resolver model; downgrade to a smaller Claude via env if cost becomes a concern
 ```
 
 Secrets via `wrangler secret put` (or dashboard encrypted variables): `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `RECIPIENT_EMAIL`. Never in `wrangler.toml`, never in source, never in D1, never logged.

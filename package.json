@@ -2,6 +2,7 @@
   "name": "claude-cron",
   "version": "0.1.0",
   "private": true,
+  "license": "CC-BY-NC-4.0",
   "description": "A Cloudflare Worker that runs versioned watch/digest jobs from D1 on a daily cron and emails the user when something fires. No fetch handler. No bot. Managed by a human talking to a Claude that can reach their Cloudflare.",
   "main": "src/index.ts",
   "scripts": {
