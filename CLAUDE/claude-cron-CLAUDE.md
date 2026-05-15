@@ -12,6 +12,7 @@ One Cloudflare Worker, `scheduled()` handler only — no web endpoint, no bot, n
 - Raw D1 prepared statements. No ORM.
 - Resolvers in `src/resolvers/` — one for `watch`, one for `digest`, each small and individually readable.
 - Minimal dependencies. A web-search-capable Anthropic call and an email send are the only real external needs. No scraping framework, no agent framework, no job-queue library.
+- The `d1_databases` binding in `wrangler.toml` **omits `database_id`**. This is intentional: it enables Cloudflare's auto-provisioning (launched Oct 2025), which is the supported install path — one click on the Deploy-to-Cloudflare button forks the repo into the user's account, provisions a fresh D1, and writes the id back into the user's copy of `wrangler.toml`. Populating `database_id` in the template ties the repo to one account and breaks the install model. Don't add it back.
 
 ## Invariants — do not violate
 

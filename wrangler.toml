@@ -7,12 +7,17 @@ compatibility_date = "2026-01-01"
 [triggers]
 crons = ["0 13 * * *"]
 
-# D1 binding. database_id is filled in at setup by the helping Claude
-# (or `wrangler d1 create claude-cron` returns it).
+# D1 binding. `database_id` is INTENTIONALLY omitted so Cloudflare's
+# auto-provisioning (launched Oct 2025) creates a fresh D1 on deploy and
+# writes the id back into the user's forked copy of this file. This is the
+# install model: one click on the Deploy-to-Cloudflare button forks the repo
+# into the user's account, provisions D1, and deploys the Worker.
+# Local `wrangler dev` also works -- a local D1 is created automatically.
+# DO NOT add a `database_id` here in the template; that would tie the repo
+# to one account and break the install path.
 [[d1_databases]]
 binding = "DB"
 database_name = "claude-cron"
-database_id = "<filled-in-at-setup>"
 
 [vars]
 # Resolver model. Bump via env if judgments are too coarse.

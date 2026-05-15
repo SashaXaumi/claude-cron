@@ -1,5 +1,28 @@
--- Claude-Cron schema. Apply once at setup.
+-- Claude-Cron schema.
 -- See CLAUDE/claude-cron-SPEC.md for the authoritative description.
+--
+-- APPLY IN TWO PASSES (per CLAUDE/claude-cron-GUIDE.md):
+--
+--   Pass 1 -- everything ABOVE the "PASS 2" banner.
+--            Creates tables, indexes, the FTS5 trigger, and inserts the
+--            default resolver prompts (config version 1). Safe to apply
+--            immediately after the D1 is auto-provisioned -- nothing here
+--            depends on the deployed Worker.
+--
+--   Pass 2 -- the single INSERT BELOW the banner.
+--            The manifest row (config version 0). Apply this AFTER the
+--            Worker is deployed and its URL is known. Substitute the three
+--            <ALL_CAPS_PLACEHOLDERS> with the real values before applying.
+--            This is written ONCE -- never UPDATE-ed, never re-INSERT-ed.
+--
+-- If you apply this file as a single batch with the placeholders unfilled,
+-- the manifest row will end up storing the literal "<WORKER_URL>" text. The
+-- DB will still function, but a future Claude session reading the manifest
+-- won't know which Worker it belongs to. Use the two-pass flow.
+
+-- ============================================================================
+-- PASS 1 below this point. Safe to apply right after D1 auto-provisioning.
+-- ============================================================================
 
 -- Jobs. Edits append a new row (same job_id, version+1). Never UPDATE.
 -- The runner always reads MAX(version) per job_id.
@@ -38,7 +61,7 @@ CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
 END;
 
 -- Config. Versioned, append-only.
--- Version 0 is the reserved MANIFEST ROW (see below). Higher versions are
+-- Version 0 is the reserved MANIFEST ROW (Pass 2 below). Higher versions are
 -- the editable default resolver instructions / standing preferences.
 CREATE TABLE IF NOT EXISTS config (
   version    INTEGER PRIMARY KEY,
@@ -56,16 +79,36 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 
 -- ----------------------------------------------------------------------------
--- Manifest row. config version 0. Never overwritten, never deleted.
--- Makes the database self-describing so any future Claude session pointed
--- at this D1 can fully orient itself with one read. Plain text.
---
--- Placeholders below are filled in at setup time by the helping Claude
--- (per CLAUDE/claude-cron-GUIDE.md):
---   <WORKER_URL>    -- e.g. https://claude-cron.<subdomain>.workers.dev
---   <ACCOUNT_ID>    -- Cloudflare account identifier
---   <DATABASE_ID>   -- D1 database ID
+-- Default resolver prompts. config version 1. JSON blob.
+-- Edits append a new version (version 2, 3, ...) -- never UPDATE.
+-- The runner uses MAX(version) WHERE version > 0 for defaults; a per-job
+-- override in `jobs.resolver_prompt` takes precedence.
+-- Applied in Pass 1 -- nothing here depends on the deployment.
 -- ----------------------------------------------------------------------------
+INSERT OR IGNORE INTO config (version, blob, changed_at, note) VALUES (
+  1,
+  '{
+    "digest_default": "You are a careful news researcher producing a digest for the user.\n\nGUIDELINES:\n- Use the web search tool to find current, sourced information on the topic.\n- Report what specific sources said. Attribute claims to their source (publication and date when available).\n- Do NOT assert facts independently. If a claim only appears in one source, say so.\n- Cite a small number of high-quality sources. Bullet points are fine.\n- If you cannot find sourced information, say so explicitly -- do not fabricate.\n- Keep it tight: 5-12 short bullets or a few short paragraphs. No padding.\n\nOUTPUT:\n- A single readable digest body, suitable for email. Markdown is OK.\n- Do NOT include JSON, code fences, or meta-commentary about the search.\n- Start directly with the digest content.",
+    "watch_default": "You are a CONSERVATIVE event watcher. The user has set up a watch on a specific condition. Determine, from web evidence, whether the condition has been resolved.\n\nCRITICAL: bias HARD toward NOT resolved.\n- A rumor, leak, ''according to insiders,'' speculative reporting -> NOT resolved.\n- A clickbait or sensational headline without confirmation from a credible source -> NOT resolved.\n- A single source making a claim that is not corroborated -> NOT resolved.\n- If you are uncertain whether it has actually happened -> NOT resolved.\n\nOnly return resolved=true when:\n- Multiple credible, independent sources confirm the event.\n- The confirmation is unambiguous (not a hedge, not a tease).\n- You have high confidence (>= 0.9).\n\nA false ''it happened'' is the worst possible outcome -- it poisons the one notification this watch exists for. Under-firing is safe.\n\nOUTPUT: a single JSON object on its own, no prose, no code fences:\n{\n  \"resolved\":  true | false,\n  \"confidence\": 0.0-1.0,\n  \"evidence\":  [\"url1\", \"url2\", \"...\"],\n  \"summary\":   \"one or two sentences\"\n}"
+  }',
+  strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+  'default resolver prompts'
+);
+
+-- ============================================================================
+-- PASS 2 below this point.
+--
+-- Apply this INSERT only AFTER the Worker has been deployed (so its URL is
+-- known) and AFTER the auto-provisioned database_id is known. Substitute
+-- the three placeholders before applying:
+--
+--   <WORKER_URL>    -- e.g. https://claude-cron.<subdomain>.workers.dev
+--   <ACCOUNT_ID>    -- the user's Cloudflare account identifier
+--   <DATABASE_ID>   -- the auto-provisioned D1 database ID
+--
+-- This row is written ONCE and never overwritten -- it is the source of
+-- truth that makes the database self-describing for future Claude sessions.
+-- ============================================================================
 INSERT OR IGNORE INTO config (version, blob, changed_at, note) VALUES (
   0,
   'This is a Claude-Cron database.
@@ -123,20 +166,4 @@ For full operating conventions see CLAUDE/claude-cron-CLAUDE.md in the repo.
 For the schema and resolver contracts see CLAUDE/claude-cron-SPEC.md.',
   strftime('%Y-%m-%dT%H:%M:%fZ','now'),
   'manifest row -- do not overwrite'
-);
-
--- ----------------------------------------------------------------------------
--- Default resolver prompts. config version 1. JSON blob.
--- Edits append a new version (version 2, 3, ...) -- never UPDATE.
--- The runner uses MAX(version) WHERE version > 0 for defaults; a per-job
--- override in `jobs.resolver_prompt` takes precedence.
--- ----------------------------------------------------------------------------
-INSERT OR IGNORE INTO config (version, blob, changed_at, note) VALUES (
-  1,
-  '{
-    "digest_default": "You are a careful news researcher producing a digest for the user.\n\nGUIDELINES:\n- Use the web search tool to find current, sourced information on the topic.\n- Report what specific sources said. Attribute claims to their source (publication and date when available).\n- Do NOT assert facts independently. If a claim only appears in one source, say so.\n- Cite a small number of high-quality sources. Bullet points are fine.\n- If you cannot find sourced information, say so explicitly -- do not fabricate.\n- Keep it tight: 5-12 short bullets or a few short paragraphs. No padding.\n\nOUTPUT:\n- A single readable digest body, suitable for email. Markdown is OK.\n- Do NOT include JSON, code fences, or meta-commentary about the search.\n- Start directly with the digest content.",
-    "watch_default": "You are a CONSERVATIVE event watcher. The user has set up a watch on a specific condition. Determine, from web evidence, whether the condition has been resolved.\n\nCRITICAL: bias HARD toward NOT resolved.\n- A rumor, leak, ''according to insiders,'' speculative reporting -> NOT resolved.\n- A clickbait or sensational headline without confirmation from a credible source -> NOT resolved.\n- A single source making a claim that is not corroborated -> NOT resolved.\n- If you are uncertain whether it has actually happened -> NOT resolved.\n\nOnly return resolved=true when:\n- Multiple credible, independent sources confirm the event.\n- The confirmation is unambiguous (not a hedge, not a tease).\n- You have high confidence (>= 0.9).\n\nA false ''it happened'' is the worst possible outcome -- it poisons the one notification this watch exists for. Under-firing is safe.\n\nOUTPUT: a single JSON object on its own, no prose, no code fences:\n{\n  \"resolved\":  true | false,\n  \"confidence\": 0.0-1.0,\n  \"evidence\":  [\"url1\", \"url2\", \"...\"],\n  \"summary\":   \"one or two sentences\"\n}"
-  }',
-  strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-  'default resolver prompts'
 );
