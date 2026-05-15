@@ -1,6 +1,6 @@
 # CLAUDE.md — Claude-Cron
 
-Operating conventions and hard rules. `GUIDE.md` is the setup procedure (read by a Claude helping a user onboard). `SPEC.md` is authoritative for the Worker, schema, and resolvers. `PLAN.md` is the build order for someone constructing or modifying Claude-Cron itself. This file governs two audiences: an agent *building* Claude-Cron, and an agent *operating* it (managing a user's jobs in a live database).
+Operating conventions and hard rules. `GUIDE.md` is the setup procedure (read by a Claude helping a user onboard). `SPEC.md` is authoritative for the Worker, schema, and resolvers. `PLAN.md` is the build order for someone constructing or modifying Claude-Cron itself. [`EMAIL.md`](claude-cron-EMAIL.md) covers email body formatting (text + HTML, inline citations for watches, Markdown→HTML for digests). This file governs two audiences: an agent *building* Claude-Cron, and an agent *operating* it (managing a user's jobs in a live database).
 
 ## What this project is
 
@@ -11,7 +11,8 @@ One Cloudflare Worker, `scheduled()` handler only — no web endpoint, no bot, n
 - TypeScript, single Worker entry (`src/index.ts`). May split into `src/` files if it stays readable. No framework.
 - Raw D1 prepared statements. No ORM.
 - Resolvers in `src/resolvers/` — one for `watch`, one for `digest`, each small and individually readable.
-- Minimal dependencies. A web-search-capable Anthropic call and an email send are the only real external needs. No scraping framework, no agent framework, no job-queue library.
+- Minimal dependencies. A web-search-capable Anthropic call and an email send are the only real external needs. No scraping framework, no agent framework, no job-queue library. `marked` is allowed for Markdown→HTML in digest emails — see [EMAIL.md](claude-cron-EMAIL.md).
+- **Resolvers return data; the Worker owns presentation.** Watches return JSON (`{resolved, confidence, evidence, summary}`); digests return Markdown. HTML/CSS/inline citations live in `src/format.ts`, never in resolver prompts. See [EMAIL.md](claude-cron-EMAIL.md) for the contract.
 - The `d1_databases` binding in `wrangler.toml` **omits `database_id`**. This is intentional: it enables Cloudflare's auto-provisioning (launched Oct 2025), which is the supported install path — one click on the Deploy-to-Cloudflare button forks the repo into the user's account, provisions a fresh D1, and writes the id back into the user's copy of `wrangler.toml`. Populating `database_id` in the template ties the repo to one account and breaks the install model. Don't add it back.
 
 ## Invariants — do not violate

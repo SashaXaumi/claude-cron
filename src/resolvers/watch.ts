@@ -44,7 +44,7 @@ OUTPUT: a single JSON object on its own, no prose, no code fences:
   "resolved":  true | false,
   "confidence": 0.0-1.0,
   "evidence":  ["url1", "url2", "..."],
-  "summary":   "one or two sentences"
+  "summary":   "Two to four sentences. Inline-cite each non-trivial claim using [1], [2], etc., where the bracketed number refers to the corresponding source in the evidence array (citation [1] refers to evidence[0], [2] to evidence[1], and so on). Cite in reading order. Do not list URLs in the summary itself."
 }`;
 
 export async function runWatch(

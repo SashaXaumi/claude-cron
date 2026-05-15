@@ -26,11 +26,12 @@ Installing creates a personal fork of the source in your GitHub. Upstream change
 src/                          Worker source (scheduled only)
 schema.sql                    Full D1 schema + manifest row template (two-pass)
 wrangler.toml                 Worker config (D1 binding declared without id -- enables auto-provisioning)
-CLAUDE/                       The four docs that govern this project
+CLAUDE/                       The docs that govern this project
   claude-cron-GUIDE.md          post-deploy setup procedure (read by a helping Claude)
   claude-cron-SPEC.md           authoritative: schema, Worker, resolvers
   claude-cron-CLAUDE.md         hard rules, invariants, boundary rule
   claude-cron-PLAN.md           build order (for someone implementing this)
+  claude-cron-EMAIL.md          email body formatting (text + HTML, watch citations, digest Markdown)
 ```
 
 ## The boundary rule

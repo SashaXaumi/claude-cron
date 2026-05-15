@@ -12,7 +12,8 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.40.0"
+    "@anthropic-ai/sdk": "^0.40.0",
+    "marked": "^14.1.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260101.0",

@@ -34,6 +34,17 @@ End state when you arrive: the Worker is live, the cron is registered, the D1 ex
 
 If the user hasn't clicked the button yet, walk them to it: open the repo's README, click **Deploy to Cloudflare**, authorize Cloudflare to fork into their GitHub, wait ~60 seconds for the "deployed" screen. Then come back here.
 
+#### What auto-provisioning does to the D1
+
+Cloudflare's auto-provisioning is **reuse-by-name** — it checks for an existing D1 with `database_name = "claude-cron"` on the account before creating a new one. Two cases to be aware of when you orient:
+
+- **No existing D1 with the same name.** A fresh D1 is created and bound to the Worker. Its ID is written back into the forked repo's `wrangler.toml`. The D1 is empty — you apply the schema (steps 2 and 3).
+- **An existing D1 with the same name** (from a prior install attempt, or a manual `wrangler d1 create claude-cron`). Cloudflare binds the Worker to the existing D1 — no duplicate is created. Two sub-cases:
+  - The existing D1 already has the schema and a populated manifest row (`config` version 0 with no `<ALL_CAPS>` placeholders remaining). This is a **prior real install.** Confirm with the user that they meant to redeploy on top of an existing install; if so, just verify (step 5) — nothing else to set up. If they wanted a clean install, they need to delete the existing D1 in the dashboard (Workers & Pages → D1 → `claude-cron` → Delete) and click the deploy button again.
+  - The existing D1 is empty or partially set up (tables exist but `config` v0 is missing, or `config` v0 still contains `<WORKER_URL>` placeholders). This is an **incomplete prior attempt.** Complete it — apply whatever's missing (Pass 1 or Pass 2 of `schema.sql`, secrets, verification).
+
+Both behaviors are correct and safe. The append-only invariants on `jobs` and `config` mean an "interrupted install + retry" never corrupts anything — the worst case is duplicate-schema attempts, and `INSERT OR IGNORE` / `CREATE TABLE IF NOT EXISTS` make those idempotent.
+
 ---
 
 ## Prerequisites the user must have (check before secrets)
@@ -101,16 +112,37 @@ After they save, the Worker should pick up the secrets on the next invocation (n
 
 End-to-end smoke test. **You drive this — the user just watches.**
 
-1. Insert one test `watch` job into D1 whose condition is already true. The classic is *"watch: has the year 2020 happened"* with `resolved_query: "Has the year 2020 happened?"`, `schedule: "daily"`, `status: "active"`, `next_run` set to the past (e.g. `2020-01-01T00:00:00.000Z`).
-2. Trigger the Worker manually from the dashboard: **Workers & Pages → claude-cron → Triggers → "Send scheduled event"** (or whatever the current dashboard wording is). This fires `scheduled()` once, without waiting for the daily cron.
-3. Confirm all four things happened:
-   - An email lands in `RECIPIENT_EMAIL` with the subject starting `Resolved:` and evidence URLs in the body.
-   - The job has flipped: a new version row with `status = 'done'`.
-   - A row appears in `messages` with the job_id, subject, content, and JSON evidence.
-   - A row appears in `runs` with `jobs_run = 1, jobs_failed = 0`.
-4. Delete the test job rows (both versions).
+1. **Insert a test watch.** Pick a condition that's *clearly resolved* with strong public evidence so the conservative resolver fires. Examples:
+   - *"watch: has the year 2020 happened"* with `resolved_query: "Has the year 2020 happened?"`
+   - *"watch: has Claude Opus 4.7 been released"* with `resolved_query: "Has Anthropic publicly released Claude Opus 4.7?"`
 
-If all four things happened, setup is complete. If any didn't, troubleshoot before moving on — the most common causes are an unverified Resend sender, a typo in `RESEND_FROM` vs `RECIPIENT_EMAIL`, or an Anthropic key with no credit on it.
+   Insert the job via D1 MCP with `type = 'watch'`, `version = 1`, `status = 'active'`, `schedule = 'daily'`, and `next_run` set to any past timestamp (e.g. `2020-01-01T00:00:00.000Z`) so the runner picks it up on the next fire.
+
+2. **Trigger a fire.** Cloudflare's dashboard has **no manual-trigger button** for production scheduled events (open feature request since 2023 — don't look for one; `wrangler dev --test-scheduled` is a local-dev path only). Use one of:
+
+   - **Recommended:** Temporarily edit the cron trigger in **Workers & Pages → claude-cron → Settings → Triggers** to `* * * * *` (every minute). Save. Wait ~2 minutes for propagation + first fire (Cloudflare says up to 15, usually faster). Verify. **Then revert the cron back to the desired daily schedule** (e.g. `0 13 * * *`).
+   - **Zero-touch:** wait for the natural daily cron fire. 0–24h delay. Bad UX for setup.
+   - *(Advanced:* `POST /accounts/{account_id}/workers/scripts/{script}/cron/test` via API token with Workers Edit scope, if exposed in the current API surface.)
+
+   While the cron is `* * * * *`, expect 1–3 extra `runs` rows logging `0 due jobs` after the test job flips to `done`. Harmless.
+
+3. **Confirm four things happened.**
+   - An email arrives at `RECIPIENT_EMAIL`. Subject starts with `Resolved:`. The body has the summary (with inline `[1]`, `[2]` citations) and a numbered **Sources** list with the evidence URLs.
+   - The test job has a new version row with `status = 'done'`.
+   - The `messages` table has a new row: `job_id` matches, `subject` matches, `evidence` is a JSON array of the source URLs.
+   - The `runs` table has a new row with `jobs_run = 1, jobs_failed = 0`.
+
+4. **Clean up the test data.** Delete the test job rows from `jobs` (both versions) and the test row from `messages`. Then rebuild the FTS index so the deletions take effect there too:
+
+   ```sql
+   DELETE FROM jobs   WHERE job_id = '<your-test-job-id>';
+   DELETE FROM messages WHERE job_id = '<your-test-job-id>';
+   INSERT INTO messages_fts(messages_fts) VALUES('rebuild');
+   ```
+
+   These hard DELETEs are a one-time exception to the append-only invariant — this is verification data, not operational data. Anywhere else in the system's life the rule is append-only.
+
+If all four checks passed, setup is complete. If any didn't, troubleshoot before moving on — the most common causes are an unverified Resend sender, a typo confusing `RESEND_FROM` vs `RECIPIENT_EMAIL`, an Anthropic key with no credit, or the cron trigger not yet propagated (give it a few more minutes).
 
 ---
 

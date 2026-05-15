@@ -16,6 +16,7 @@ import {
   type JobRow,
 } from "./db";
 import { sendEmail } from "./email";
+import { formatDigestEmail, formatWatchEmail } from "./format";
 import { runDigest, type DigestResult } from "./resolvers/digest";
 import { runWatch, type WatchResult } from "./resolvers/watch";
 
@@ -121,13 +122,12 @@ async function runWatchJob(
 
   // RESOLVED. Log with evidence FIRST, then email, then flip status=done.
   // If email fails, status stays 'active' and the next run retries.
-  const subject = `Resolved: ${job.nl_request}`;
-  const body = formatWatchResolvedBody(job, result);
+  const { subject, text, html } = formatWatchEmail(job, result);
 
   await writeMessage(env.DB, {
     jobId: job.job_id,
     subject,
-    content: body,
+    content: text,
     evidence: result.evidence,
   });
 
@@ -136,7 +136,8 @@ async function runWatchJob(
     from: env.RESEND_FROM,
     to: env.RECIPIENT_EMAIL,
     subject,
-    text: body,
+    text,
+    html,
   });
 
   await appendJobVersion(env.DB, job, { status: "done" });
@@ -176,11 +177,11 @@ async function runDigestJob(
 
   // Resolver succeeded. Log FIRST, then email, then advance next_run.
   // If email fails, next_run is not advanced and the job re-fires next cron.
-  const subject = `Digest: ${job.nl_request}`;
+  const { subject, text, html } = formatDigestEmail(job, result.body);
   await writeMessage(env.DB, {
     jobId: job.job_id,
     subject,
-    content: result.body,
+    content: text,
   });
 
   await sendEmail({
@@ -188,25 +189,11 @@ async function runDigestJob(
     from: env.RESEND_FROM,
     to: env.RECIPIENT_EMAIL,
     subject,
-    text: result.body,
+    text,
+    html,
   });
 
   const next = computeNextRun(job.schedule, job.next_run);
   await appendJobVersion(env.DB, job, { next_run: next });
   console.log(`digest emailed: ${job.job_id}, next_run=${next}`);
-}
-
-function formatWatchResolvedBody(job: JobRow, result: WatchResult): string {
-  const lines = [
-    result.summary.trim(),
-    "",
-    `Confidence: ${result.confidence}`,
-    "",
-    "Evidence:",
-    ...result.evidence.map((url) => `- ${url}`),
-    "",
-    `Original watch: ${job.nl_request}`,
-    `Resolved query: ${job.resolved_query}`,
-  ];
-  return lines.join("\n");
 }

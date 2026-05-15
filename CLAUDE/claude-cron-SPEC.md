@@ -126,6 +126,7 @@ Resolver instructions default from `config` (latest version > 0) and can be over
 - Resend. One recipient: `RECIPIENT_EMAIL` (set as a Worker secret at setup). Claude-Cron only ever emails this one address — there is no multi-recipient path, no allowlist needed, no "send to someone else" capability. Single recipient is the whole model.
 - Every email sent is written to `messages` (with `evidence` for watch fires).
 - Resend send fails → log it, leave the job/message state such that it retries next run rather than being silently lost.
+- **Body formatting (text + HTML) is owned by the Worker, not the resolvers.** Resolvers return data (JSON for watches, Markdown for digests); `src/format.ts` produces the final `{subject, text, html}` for Resend. See [EMAIL.md](claude-cron-EMAIL.md) for the templates, the inline-citation convention for watch summaries, and the design constraints.
 
 ## wrangler.toml shape
 
